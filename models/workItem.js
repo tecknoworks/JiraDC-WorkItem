@@ -23,7 +23,7 @@ const model = mongoose.Schema({
     },
     priority: {
         type: String,
-        required: false
+        required: true
     },
     // attachment: {
     //     type: String,
