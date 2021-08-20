@@ -16,6 +16,9 @@ const baseUrl = 'http://localhost';
 const issuesServiceUrl = baseUrl + ':8086';
 const sprintServiceUrl = baseUrl + ':8090';
 const priorityServiceUrl = baseUrl + ':8085';
+const issueServiceUrl = baseUrl + ':8084';
+const usersServiceUrl = baseUrl + ':8082';
+const commentsServiceUrl = baseUrl + ':8091';
 const projectServiceUrl = baseUrl + ':8083';
 const port = 8084
 
@@ -25,24 +28,39 @@ mongoose.connect(mongoDB, {useNewUrlParser: true, useUnifiedTopology: true});
 var db = mongoose.connection;
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
+
 app.post('/workItem', async (req, res) => {
     let newWorkItem = req.body
     var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint })
     await WorkItem.create(addWorkItem)
-
-    if(req.body.labels !== undefined){
+    if(req.body.labels !== ""){
     await Promise.all(req.body.labels.map(label => {
         let addLinkLabel= new LinkLabels({work_item: addWorkItem._id, label: label._id})
         LinkLabels.create(addLinkLabel)
     }))
     }
-    if(req.body.components !== undefined){
+    if(req.body.components !== ""){
         await Promise.all(req.body.components.map(component => {
             let addLinkComponent= new LinkComponents({work_item: addWorkItem._id, component: component._id})
             LinkComponents.create(addLinkComponent)
         }))
     }
     res.send(newWorkItem)
+})
+
+app.post('/allepiclinks', async (req, res) =>{
+    let result = [];
+    if (req.body.length) {
+        for (let index = 0; index < req.body.length; index++) {
+            if(req.body[index]!==''){
+                const issue = await WorkItem.find({ '_id': req.body[index] })
+                result.push(issue[0]);
+            }else{
+                result.push({name:"No Epic"});
+            }
+        }
+    }
+    res.json(result)
 })
 
 function groupBy(objectArray, property) {
@@ -55,13 +73,14 @@ function groupBy(objectArray, property) {
       return acc;
     }, {});
   }
-
+ 
 app.post('/workItemProject', async (req, res) =>{
-    console.log(req.body)
     let result = []
     let record = await WorkItem.find({'project':req.body.id})
     issueIds=record.map(i => i.issue_type);
     priorityIds=record.map(i => i.priority);
+    epicLinkIds=record.map(i => i.epic_link);
+    assigneeIds=record.map(i => i.assignee);
     sprintIds=[]
     for (let index = 0; index < record.length; index++) {
         sprintIds[index]=record[index].sprint
@@ -70,6 +89,8 @@ app.post('/workItemProject', async (req, res) =>{
     issues = [] 
     priorities = []
     sprints=[]
+    epiclinks=[]
+    assignees=[]
     await fetch(issuesServiceUrl + '/allIssues', 
     { 
         method: 'POST',
@@ -91,8 +112,7 @@ app.post('/workItemProject', async (req, res) =>{
     })
     .then(res => res.json())
     .then(data => priorities = data);
-    
-    console.log(sprintIds)
+
     await fetch(sprintServiceUrl + '/allsprints', 
     { 
         method: 'POST',
@@ -104,6 +124,29 @@ app.post('/workItemProject', async (req, res) =>{
     .then(res => res.json())
     .then(data => sprints = data);
 
+    await fetch(issueServiceUrl + '/allepiclinks', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(epicLinkIds)
+    })
+    .then(res => res.json())
+    .then(data => epiclinks = data);
+
+    await fetch(usersServiceUrl + '/allusersselected', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(assigneeIds)
+    })
+    .then(res => res.json())
+    .then(data => assignees = data);
+
+    
     for (let index = 0; index < record.length; index++) {
         if (!issues[index]) {
             issues[index] = { name: "no issue" };
@@ -111,6 +154,24 @@ app.post('/workItemProject', async (req, res) =>{
         if (!priorities[index]) {
             priorities[index] = { name: "no priority" };
         }
+
+        let components = await LinkComponents.find({ work_item: record[index]._id });
+        let labels = await LinkLabels.find({ work_item: record[index]._id });
+
+        comments=[]
+    await fetch(commentsServiceUrl + '/allItemComments', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({'_id':record[index]._id})
+    })
+    .then(res => res.json())
+    .then(data => comments = data);
+
+    console.log(comments)
+
         const componentDTO = {
             _id: record[index]._id,
             project: "projectId",
@@ -121,26 +182,49 @@ app.post('/workItemProject', async (req, res) =>{
             priority: priorities[index].name,
             linked_issue: "linkedIssueId",
             issue: "issueId",
-            assignee: "assigneeId",
-            epic_link: "epicLinkId",
+            assignee: assignees[index].username,
+            epic_link: epiclinks[index].name,
             sprint: sprints[index].name,
-            labels: "labelsId",
-            components: "componentsId",
+            labels: components,
+            components: labels,
+            status:record[index].status,
+            comments:comments
         }
         result.push(componentDTO);   
+        console.log(componentDTO)
     }  
-
     var grouped = groupBy(result, 'sprint')
-    //console.log(grouped)
-
     res.json(grouped)
 })
 
-
-
 app.get('/workItem', async (req, res) =>{
     const record= await WorkItem.find({})
-    res.json(record)
+    let result=[]
+    for (let index = 0; index < record.length; index++) {
+      let components = await LinkComponents.find({ work_item: record[index]._id });
+      let labels = await LinkLabels.find({ work_item: record[index]._id });
+
+      comments=[]
+      await fetch(commentsServiceUrl + '/allItemComments', 
+      { 
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({'_id':record[index]._id})
+      })
+      .then(res => res.json())
+      .then(data => comments = data);
+  
+      console.log(comments)
+      var rez = JSON.parse(JSON.stringify(record[index]));
+      rez.component = JSON.parse(JSON.stringify(components));
+      rez.label = JSON.parse(JSON.stringify(labels));
+      rez.comments = comments;
+
+      result.push(rez)
+    }
+    res.json(result)
 })
 
 app.get('/workItem/epic', async (req, res) =>{
@@ -155,8 +239,9 @@ app.get('/workItem/epic', async (req, res) =>{
 
 app.put('/workItem', async (req, res) =>{
     const newObject = req.body
+    const editedObject={project:newObject.project,issue_type:newObject.issue_type, epic_name:newObject.epic_name, summary:newObject.summary,description:newObject.description,priority:newObject.priority,linked_issue:newObject.linked_issue,issue:newObject.issue,assignee:newObject.assignee,epic_link:newObject.epic_link,sprint:newObject.sprint }
     const filter={_id:req.body._id}
-    let update_= await WorkItem.findOneAndUpdate(filter, newObject, {
+    let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
         new: true,
         upsert: true 
       });
@@ -165,9 +250,15 @@ app.put('/workItem', async (req, res) =>{
 
 app.post('/workItemById', async (req, res) =>{
     const newObject = req.body
-    const record= await WorkItem.find({'_id':req.body._id})
-    console.log(record)
-    res.send(record)
+    var record= await WorkItem.find({'_id':req.body._id})
+    let components = await LinkComponents.find({ work_item: req.body._id });
+    let labels = await LinkLabels.find({ work_item: req.body._id });
+
+    var rez=JSON.parse(JSON.stringify(record))
+    rez[0].component=JSON.parse(JSON.stringify(components))
+    rez[0].label=JSON.parse(JSON.stringify(labels))
+
+    res.json(rez)
 })
 
 

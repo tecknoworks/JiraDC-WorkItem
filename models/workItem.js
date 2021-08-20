@@ -23,7 +23,7 @@ const model = mongoose.Schema({
     },
     priority: {
         type: String,
-        required: true
+        required: false
     },
     // attachment: {
     //     type: String,
@@ -48,6 +48,10 @@ const model = mongoose.Schema({
     sprint: {
         type: String,
         required: false
+    },
+    status: {
+        type: String,
+        default: "To do"
     },
 
 });
