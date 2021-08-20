@@ -31,7 +31,9 @@ db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 app.post('/workItem', async (req, res) => {
     let newWorkItem = req.body
-    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint })
+    let record = await WorkItem.find({})
+    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint,positionInSprint: record.length + 1 })
+    console.log(addWorkItem)
     await WorkItem.create(addWorkItem)
     if(req.body.labels !== ""){
     await Promise.all(req.body.labels.map(label => {
@@ -173,7 +175,6 @@ app.post('/workItemProject', async (req, res) =>{
     .then(res => res.json())
     .then(data => comments = data);
 
-    console.log(comments)
 
         const componentDTO = {
             _id: record[index]._id,
@@ -192,10 +193,10 @@ app.post('/workItemProject', async (req, res) =>{
             labels: labels,
             components: components,
             status:record[index].status,
-            comments:comments
+            comments:comments,
+            positionInSprint:record[index].positionInSprint,
         }
         result.push(componentDTO);   
-        console.log(componentDTO)
     }  
     var grouped = groupBy(result, 'sprint')
     res.json(grouped)
@@ -219,13 +220,11 @@ app.get('/workItem', async (req, res) =>{
       })
       .then(res => res.json())
       .then(data => comments = data);
-  
-      console.log(comments)
       var rez = JSON.parse(JSON.stringify(record[index]));
       rez.component = JSON.parse(JSON.stringify(components));
       rez.label = JSON.parse(JSON.stringify(labels));
       rez.comments = comments;
-
+      rez.positionInSprint = record[index].positionInSprint;
       result.push(rez)
     }
     res.json(result)
