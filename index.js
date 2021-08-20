@@ -64,14 +64,17 @@ app.post('/allepiclinks', async (req, res) =>{
 })
 
 function groupBy(objectArray, property) {
-    return objectArray.reduce(function (acc, obj) {
+    var res = objectArray.reduce(function (acc, obj) {
       var key = obj[property];
       if (!acc[key]) {
-        acc[key] = [];
+        acc[key] = {items: [], id: obj.sprint_id};
+
       }
-      acc[key].push(obj);
+      acc[key].items.push(obj);
       return acc;
     }, {});
+
+    return res;
   }
  
 app.post('/workItemProject', async (req, res) =>{
@@ -185,8 +188,9 @@ app.post('/workItemProject', async (req, res) =>{
             assignee: assignees[index].username,
             epic_link: epiclinks[index].name,
             sprint: sprints[index].name,
-            labels: components,
-            components: labels,
+            sprint_id: sprints[index]._id,
+            labels: labels,
+            components: components,
             status:record[index].status,
             comments:comments
         }
