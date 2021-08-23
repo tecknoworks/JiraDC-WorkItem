@@ -53,7 +53,10 @@ const model = mongoose.Schema({
         type: String,
         default: "To do"
     },
-
+    positionInSprint:{
+        type: Number,
+        default: 0
+    }
 });
 
 module.exports = new mongoose.model("WorkItem", model)
