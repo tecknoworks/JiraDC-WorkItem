@@ -242,6 +242,7 @@ app.get('/workItem/epic', async (req, res) =>{
 
 app.put('/workItem', async (req, res) =>{
     const newObject = req.body
+
     const editedObject={project:newObject.project,issue_type:newObject.issue_type, epic_name:newObject.epic_name, summary:newObject.summary,description:newObject.description,priority:newObject.priority,linked_issue:newObject.linked_issue,issue:newObject.issue,assignee:newObject.assignee,epic_link:newObject.epic_link,sprint:newObject.sprint }
     const filter={_id:req.body._id}
     let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
@@ -249,6 +250,34 @@ app.put('/workItem', async (req, res) =>{
         upsert: true 
       });
     res.send(update_)
+})
+
+app.put('/workItemChangePosition', async (req, res) =>{
+  
+    await Promise.all(req.body.items.map(async(wi) => {  
+    const editedObject = { _id:wi._id,positionInSprint:wi.positionInSprint }
+    const filter={_id:wi._id}
+    let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
+        new: true,
+        upsert: true 
+      });
+    res.send(update_)
+    }
+    ))
+})
+
+app.put('/workItemChangeSprint', async (req, res) =>{
+
+    await Promise.all(req.body.items.map(async(wi) => {  
+    const editedObject = { _id:wi._id,positionInSprint:wi.positionInSprint, sprint:wi.sprint }
+    const filter={_id:wi._id}
+    let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
+        new: true,
+        upsert: true 
+      });
+    res.send(update_)
+    }
+    ))
 })
 
 app.post('/workItemById', async (req, res) =>{
