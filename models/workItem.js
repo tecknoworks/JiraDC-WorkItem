@@ -56,6 +56,10 @@ const model = mongoose.Schema({
     positionInSprint:{
         type: Number,
         default: 0
+    },
+    key:{
+        type: String,
+        required: false
     }
 });
 
