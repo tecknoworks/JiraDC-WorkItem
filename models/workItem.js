@@ -60,6 +60,10 @@ const model = mongoose.Schema({
     key:{
         type: String,
         required: false
+    },
+    positionInStatus:{
+        type: Number,
+        default: 0
     }
 });
 

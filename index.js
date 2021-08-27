@@ -51,7 +51,7 @@ app.post('/workItem', async (req, res) => {
     .then(data => project = data);
     let number = record.length + 1
     let key = project[0].key + String(number)
-    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint,positionInSprint: record.length + 1 ,key:key})
+    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint,positionInSprint: record.length + 1 ,key:key , positionInStatus: record.length+1})
     await WorkItem.create(addWorkItem)
     if(req.body.labels !== ""){
     await Promise.all(req.body.labels.map(label => {
@@ -100,8 +100,11 @@ function groupBy(objectArray, property) {
     var res = objectArray.reduce(function (acc, obj) {
       var key = obj[property];
       if (!acc[key]) {
-        acc[key] = {items: [], id: obj.sprint_id};
-
+        if(key==="Backlog"){
+            acc[key] = {items: [], id: 0};
+        }else{
+            acc[key] = {items: [], id: obj.sprint_id};
+        }
       }
       acc[key].items.push(obj);
       return acc;
@@ -113,14 +116,12 @@ function groupBy(objectArray, property) {
 app.post('/workItemProject', async (req, res) =>{
     let result = []
     let record = await WorkItem.find({'project':req.body.id})
+
     issueIds=record.map(i => i.issue_type);
     priorityIds=record.map(i => i.priority);
     epicLinkIds=record.map(i => i.epic_link);
     assigneeIds=record.map(i => i.assignee);
-    sprintIds=[]
-    for (let index = 0; index < record.length; index++) {
-        sprintIds[index]=record[index].sprint
-    }
+    sprintIds=record.map(i => i.sprint);
 
     issues = [] 
     priorities = []
@@ -148,7 +149,7 @@ app.post('/workItemProject', async (req, res) =>{
     })
     .then(res => res.json())
     .then(data => priorities = data);
-
+    
     await fetch(sprintServiceUrl + '/allsprints', 
     { 
         method: 'POST',
@@ -226,10 +227,18 @@ app.post('/workItemProject', async (req, res) =>{
             status:record[index].status,
             comments:comments,
             positionInSprint:record[index].positionInSprint,
+            positionInStatus:record[index].positionInStatus,
         }
         result.push(componentDTO);   
     }  
     var grouped = groupBy(result, 'sprint')
+    let hasBacklog=0
+    for(let prop in grouped){
+        if(prop==="Backlog")
+            hasBacklog=1
+    }
+    if(hasBacklog===0)
+        grouped["Backlog"]={items: [], id: 0}
     res.json(grouped)
 })
 
@@ -256,6 +265,7 @@ app.get('/workItem', async (req, res) =>{
       rez.label = JSON.parse(JSON.stringify(labels));
       rez.comments = comments;
       rez.positionInSprint = record[index].positionInSprint;
+      rez.positionInStatus = record[index].positionInStatus;
       result.push(rez)
     }
     res.json(result)
@@ -271,10 +281,10 @@ app.get('/workItem/epic', async (req, res) =>{
     res.json(record)
 })
 
-app.put('/workItem', async (req, res) =>{
+app.put('/updateWorkItem', async (req, res) =>{
     const newObject = req.body
-
-    const editedObject={project:newObject.project,issue_type:newObject.issue_type, epic_name:newObject.epic_name, summary:newObject.summary,description:newObject.description,priority:newObject.priority,linked_issue:newObject.linked_issue,issue:newObject.issue,assignee:newObject.assignee,epic_link:newObject.epic_link,sprint:newObject.sprint }
+    console.log(newObject)
+    const editedObject={project:newObject.project,issue_type:newObject.issue_type, epic_name:newObject.epic_name, summary:newObject.summary,description:newObject.description,priority:newObject.priority,linked_issue:newObject.linked_issue,issue:newObject.issue,assignee:newObject.assignee,epic_link:newObject.epic_link,sprint:newObject.sprint,status:newObject.status }
     const filter={_id:req.body._id}
     let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
         new: true,
@@ -293,14 +303,18 @@ app.put('/workItemChangePosition', async (req, res) =>{
         upsert: true 
       });
     res.send(update_)
-    }
+     }
     ))
 })
 
 app.put('/workItemChangeSprint', async (req, res) =>{
 
     await Promise.all(req.body.items.map(async(wi) => {  
-    const editedObject = { _id:wi._id,positionInSprint:wi.positionInSprint, sprint:wi.sprint }
+    let id_sprint=""
+    if(wi.sprint_id!==0){
+        id_sprint=wi.sprint_id
+    }
+    const editedObject = { _id:wi._id,positionInSprint:wi.positionInSprint, sprint:id_sprint }
     const filter={_id:wi._id}
     let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
         new: true,
@@ -324,7 +338,34 @@ app.post('/workItemById', async (req, res) =>{
     res.json(rez)
 })
 
+app.put('/workItemChangePositionStatus', async (req, res) =>{
+  
+    console.log(req.body.items)
+    await Promise.all(req.body.items.map(async(wi) => {  
+    const editedObject = { _id:wi._id,positionInStatus:wi.positionInStatus}
+    const filter={_id:wi._id}
+    let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
+        new: true,
+        upsert: true 
+      });
+    res.send(update_)
+    }
+    ))
+})
 
+app.put('/workItemChangeStatus', async (req, res) =>{
+  
+    await Promise.all(req.body.items.map(async(wi) => {  
+    const editedObject = { _id:wi._id,positionInStatus:wi.positionInStatus,status:wi.status }
+    const filter={_id:wi._id}
+    let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
+        new: true,
+        upsert: true 
+      });
+    res.send(update_)
+    }
+    ))
+})
 app.listen(port, () => {
     console.log(`Example app listening at http://localhost:${port}`)
   })
