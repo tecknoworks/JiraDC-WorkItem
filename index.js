@@ -31,8 +31,27 @@ db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 app.post('/workItem', async (req, res) => {
     let newWorkItem = req.body
-    let record = await WorkItem.find({})
-    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint,positionInSprint: record.length + 1 , positionInStatus: record.length+1})
+    let record = await WorkItem.find({project:newWorkItem.project})
+    let project = ""
+    let summary = req.body.summary.substring(0,15)
+    if(req.body.summary.length>15)
+    {
+        summary=summary+"..."
+    }
+    
+    await fetch(projectServiceUrl + '/projectId', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({_id:newWorkItem.project})
+    })
+    .then(res => res.json())
+    .then(data => project = data);
+    let number = record.length + 1
+    let key = project[0].key + String(number)
+    var addWorkItem=new WorkItem({project:newWorkItem.project,issue_type:newWorkItem.issue_type, epic_name:newWorkItem.epic_name, summary:newWorkItem.summary,description:newWorkItem.description,priority:newWorkItem.priority,linked_issue:newWorkItem.linked_issue,issue:newWorkItem.issue,assignee:newWorkItem.assignee,epic_link:newWorkItem.epic_link,sprint:newWorkItem.sprint,positionInSprint: record.length + 1 ,key:key , positionInStatus: record.length+1})
     await WorkItem.create(addWorkItem)
     if(req.body.labels !== ""){
     await Promise.all(req.body.labels.map(label => {
@@ -46,6 +65,19 @@ app.post('/workItem', async (req, res) => {
             LinkComponents.create(addLinkComponent)
         }))
     }
+    var request = {
+        project: "PRJ1",
+        message: "A new workItem with the key: "+ key + " - " + summary + " was created !"
+      };
+    await fetch("http://localhost:1106/Project", 
+      { 
+          method: 'POST',
+          mode: "cors",
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(request)
+      })
     res.send(newWorkItem)
 })
 
@@ -288,6 +320,7 @@ app.put('/workItemChangeSprint', async (req, res) =>{
         new: true,
         upsert: true 
       });
+      
     res.send(update_)
     }
     ))
@@ -302,7 +335,6 @@ app.post('/workItemById', async (req, res) =>{
     var rez=JSON.parse(JSON.stringify(record))
     rez[0].component=JSON.parse(JSON.stringify(components))
     rez[0].label=JSON.parse(JSON.stringify(labels))
-
     res.json(rez)
 })
 

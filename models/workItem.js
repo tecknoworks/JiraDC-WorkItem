@@ -57,6 +57,10 @@ const model = mongoose.Schema({
         type: Number,
         default: 0
     },
+    key:{
+        type: String,
+        required: false
+    },
     positionInStatus:{
         type: Number,
         default: 0
