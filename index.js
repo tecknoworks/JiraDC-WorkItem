@@ -366,6 +366,18 @@ app.put('/workItemChangeStatus', async (req, res) =>{
     }
     ))
 })
+
+app.post('/workitemIssue', async (req, res) =>{
+    let result = [];
+    if (req.body.length) {
+        for (let index = 0; index < req.body.length; index++) {
+            const componentIssue = await LinkComponents.find({ 'component': req.body[index] })
+            result.push(componentIssue.length);
+        }
+    }
+    res.json(result)
+})
+
 app.listen(port, () => {
     console.log(`Example app listening at http://localhost:${port}`)
   })
