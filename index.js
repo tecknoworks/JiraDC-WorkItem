@@ -1,12 +1,4 @@
 const express = require('express')
-// const ExpressCache = require('express-cache-middleware')
-// const cacheManager = require('cache-manager')
- 
-// const cacheMiddleware = new ExpressCache(
-//     cacheManager.caching({
-//         store: 'memory', max: 10000, ttl: 100
-//     })
-// )
 const bodyParser = require('body-parser');
 var mongoose = require('mongoose');
 var cors = require('cors')
@@ -18,7 +10,6 @@ app.use(cors())
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.raw());
-//cacheMiddleware.attach(app)
 const BASE_API_URL = "http://localhost:8081";
 const WorkItem = require('./models/workItem')
 const LinkComponents = require('./models/linkComponents')
@@ -32,6 +23,7 @@ const usersServiceUrl = baseUrl + ':8082';
 const commentsServiceUrl = baseUrl + ':8091';
 const projectServiceUrl = baseUrl + ':8083';
 const workItemServiceUrl = baseUrl + ':8084';
+const gitServiceUrl = baseUrl + ':8092';
 const port = 8084
 
 var mongoDB = 'mongodb+srv://cata:cata@cluster0.wcbqw.mongodb.net/first?retryWrites=true&w=majority';
@@ -77,6 +69,16 @@ app.post('/workItem', async (req, res) => {
             LinkComponents.create(addLinkComponent)
         }))
     }
+
+    fetch(gitServiceUrl + '/addworkitem', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({project_id:project[0]._id ,git_url:project[0].git_url, workitem_id:addWorkItem._id,owner:project[0].owner,repository:project[0].repository})
+    })
+
     var request = {
         project: "PRJ1",
         message: "A new workItem with the key: "+ key + " - " + summary + " was created !"
@@ -163,7 +165,8 @@ app.post('/allLinkedLabels', async (req, res) =>{
   var comments=[]
   var labels=[]
   var components=[]
-async function requestsMicroservices(issueIds,priorityIds,sprintIds,epicLinkIds,assigneeIds,workItemsIds){
+  var commits=[]
+async function requestsMicroservices(issueIds,priorityIds,sprintIds,epicLinkIds,assigneeIds,workItemsIds,workItemProjectIds){
    
  fetch(issuesServiceUrl + '/allIssues', 
     { 
@@ -252,6 +255,17 @@ async function requestsMicroservices(issueIds,priorityIds,sprintIds,epicLinkIds,
     .then(res => res.json())
     .then(data => labels = data);
 
+    fetch(gitServiceUrl + '/allworkitems', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workItemProjectIds)
+    })
+    .then(res => res.json())
+    .then(data => commits = data);
+
 }
  
 app.post('/workItemProject', async (req, res) =>{
@@ -264,9 +278,9 @@ app.post('/workItemProject', async (req, res) =>{
     assigneeIds=record.map(i => i.assignee);
     sprintIds=record.map(i => i.sprint);
     workItemIds=record.map(i => i._id);
+    workItemProjectIds=record.map(i => i.key);
 
-    let microservicesInfo=await requestsMicroservices(issueIds,priorityIds,sprintIds,epicLinkIds,assigneeIds)
-
+    let microservicesInfo=await requestsMicroservices(issueIds,priorityIds,sprintIds,epicLinkIds,assigneeIds,workItemIds,workItemProjectIds)
     for (let index = 0; index < record.length; index++) {
         if (!issues[index]) {
             issues[index] = { name: "no issue" };
@@ -274,6 +288,25 @@ app.post('/workItemProject', async (req, res) =>{
         if (!priorities[index]) {
             priorities[index] = { name: "no priority" };
         }
+
+        let labelsWI=[]
+        if(labels[index]===undefined || labels[index]===null)
+            labelsWI=[]
+        else
+            labelsWI=labels[index]
+        
+        let componentsWI=[]
+        if(components[index]===undefined || components[index]===null)
+            componentsWI=[]
+        else
+            componentsWI=components[index]
+        
+        let commitsWI=[]
+        if(commits[index]===undefined || commits[index]===null)
+            commitsWI=[]
+        else
+            commitsWI=commits[index]
+            
         const componentDTO = {
             _id: record[index]._id,
             project: "projectId",
@@ -289,12 +322,14 @@ app.post('/workItemProject', async (req, res) =>{
             sprint: sprints[index].name,
             sprint_id: sprints[index]._id,
             sprint_closed:sprints[index].closed,
-            labels: labels[index],
-            components: components[index],
+            labels: labelsWI,
+            components: componentsWI,
+            commits:commitsWI,
             status:record[index].status,
-            comments:comments[index],
+            comments:comments[index]===undefined ? []:comments[index],
             positionInSprint:record[index].positionInSprint,
             positionInStatus:record[index].positionInStatus,
+            key:record[index].key===undefined ? "" : record[index].key,
         }
         result.push(componentDTO);   
     }  
@@ -326,31 +361,85 @@ app.post('/workItemProject', async (req, res) =>{
     res.json(grouped)
 })
 
+var commentsworkItem=[]
+var componentsworkItem=[]
+var labelsworkItem=[]
+var commitsworkItem=[]
+async function requestsMicroservicesWorkItem(workItemsIds,workItemProjectIds){
+    fetch(commentsServiceUrl + '/allcomments', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workItemsIds)
+    })
+    .then(res => res.json())
+    .then(data => commentsworkItem = data);
 
+
+    fetch(workItemServiceUrl + '/allLinkedComponents', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workItemsIds)
+    })
+    .then(res => res.json())
+    .then(data => componentsworkItem = data);
+
+    fetch(workItemServiceUrl + '/allLinkedLabels', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workItemsIds)
+    })
+    .then(res => res.json())
+    .then(data => labelsworkItem = data);
+
+    fetch(gitServiceUrl + '/allworkitems', 
+    { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workItemProjectIds)
+    })
+    .then(res => res.json())
+    .then(data => commitsworkItem = data);
+}
 app.get('/workItem', async (req, res) =>{
     const record= await WorkItem.find({})
-
-
+    let workItemIds=record.map(i => i._id);
+    let workItemProjectIds=record.map(i => i.key);
+    let microservicesInfo=await requestsMicroservicesWorkItem(workItemIds,workItemProjectIds)
     let result=[]
-    for (let index = 0; index < record.length; index++) {
-      let components = await LinkComponents.find({ work_item: record[index]._id });
-      let labels = await LinkLabels.find({ work_item: record[index]._id });
 
-      comments=[]
-      await fetch(commentsServiceUrl + '/allItemComments', 
-      { 
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({'_id':record[index]._id})
-      })
-      .then(res => res.json())
-      .then(data => comments = data);
+    for (let index = 0; index < record.length; index++) {
       var rez = JSON.parse(JSON.stringify(record[index]));
-      rez.component = JSON.parse(JSON.stringify(components));
-      rez.label = JSON.parse(JSON.stringify(labels));
-      rez.comments = comments;
+      if(componentsworkItem[index]===undefined || componentsworkItem[index]===null)
+         rez.component = [];
+      else
+        rez.component = componentsworkItem[index];
+
+        if(labelsworkItem[index]===undefined || labelsworkItem[index]===null)
+        rez.label = [];
+     else
+     rez.label = labelsworkItem[index];
+
+     if(commentsworkItem[index]===undefined || commentsworkItem[index]===null)
+     rez.comments = [];
+     else
+     rez.comments = commentsworkItem[index];
+
+     if(commitsworkItem[index]===undefined || commitsworkItem[index]===null)
+     rez.commits = [];
+     else
+     rez.commits = commitsworkItem[index];
+
       rez.positionInSprint = record[index].positionInSprint;
       rez.positionInStatus = record[index].positionInStatus;
       result.push(rez)
