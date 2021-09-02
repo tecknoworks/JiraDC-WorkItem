@@ -459,13 +459,30 @@ app.get('/workItem/epic', async (req, res) =>{
 
 app.put('/updateWorkItem', async (req, res) =>{
     const newObject = req.body
+    let summary = req.body.summary.substring(0,15)
+    if(req.body.summary.length>15)
+    {
+        summary=summary+"..."
+    }
     const editedObject={project:newObject.project,issue_type:newObject.issue_type, epic_name:newObject.epic_name, summary:newObject.summary,description:newObject.description,priority:newObject.priority,linked_issue:newObject.linked_issue,issue:newObject.issue,assignee:newObject.assignee,epic_link:newObject.epic_link,sprint:newObject.sprint,status:newObject.status }
     const filter={_id:req.body._id}
     let update_= await WorkItem.findOneAndUpdate(filter, editedObject, {
         new: true,
         upsert: true 
       });
-
+      var request = {
+        project: "PRJ1",
+        message: "A workItem with the key: "+ update_.key + " - " +summary + " was modified !"
+      };
+    await fetch("http://localhost:1106/Project", 
+      { 
+          method: 'POST',
+          mode: "cors",
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(request)
+      })
     res.send(update_)
 })
 
